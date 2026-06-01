@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Plus, Trash2, Printer, FileText, CalendarDays } from "lucide-react";
+import { Plus, Trash2, Printer, FileText, CalendarDays, UserPlus } from "lucide-react";
 
 const schools = [
   {
@@ -64,19 +64,7 @@ const schools = [
       { name: "B", time: "17:40-18:40" },
     ],
   },
-  {
-    id: "iwanuma-acro",
-    area: "宮城",
-    name: "岩沼アクロ体操教室",
-    day: "月曜（月3回）",
-    venue: "岩沼西コミュニティセンター",
-    defaultRate: 1200,
-    classes: [
-      { name: "A", time: "16:10-17:10" },
-      { name: "B", time: "17:20-18:20" },
-    ],
-  },
-  {
+{
     id: "aki-acro",
     area: "高知",
     name: "安芸スカイアクロ体操教室",
@@ -193,16 +181,54 @@ const schools = [
 ];
 
 function yen(value) {
-  return new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(Number(value || 0));
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 }
-function todayString() { return new Date().toISOString().slice(0, 10); }
-function uniqueId() { return `row-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
-function safeNumber(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
-function getSchoolById(id) { return schools.find((school) => school.id === id) || schools[0]; }
-function getMonthStart(targetMonth) { const [year, month] = targetMonth.split("-").map(Number); return new Date(year, month - 1, 1); }
-function formatDate(date) { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, "0"); const day = String(date.getDate()).padStart(2, "0"); return `${year}-${month}-${day}`; }
-function formatJapaneseDate(dateText) { const [, month, day] = dateText.split("-"); return `${Number(month)}/${Number(day)}`; }
-function addMonths(monthText, diff) { const [year, month] = monthText.split("-").map(Number); const date = new Date(year, month - 1 + diff, 1); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
+
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function uniqueId() {
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function safeNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getSchoolById(id) {
+  return schools.find((school) => school.id === id) || schools[0];
+}
+
+function getMonthStart(targetMonth) {
+  const [year, month] = targetMonth.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatJapaneseDate(dateText) {
+  const [, month, day] = dateText.split("-");
+  return `${Number(month)}/${Number(day)}`;
+}
+
+function addMonths(monthText, diff) {
+  const [year, month] = monthText.split("-").map(Number);
+  const date = new Date(year, month - 1 + diff, 1);
+  const nextYear = date.getFullYear();
+  const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
+  return `${nextYear}-${nextMonth}`;
+}
 
 function buildCalendarDays(targetMonth) {
   const start = getMonthStart(targetMonth);
@@ -211,9 +237,11 @@ function buildCalendarDays(targetMonth) {
   const firstWeekday = start.getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const cells = [];
+
   for (let i = 0; i < firstWeekday; i += 1) cells.push(null);
   for (let day = 1; day <= daysInMonth; day += 1) cells.push(formatDate(new Date(year, monthIndex, day)));
   while (cells.length % 7 !== 0) cells.push(null);
+
   return cells;
 }
 
@@ -222,37 +250,114 @@ function toggleDate(dates, date) {
   return [...dates, date].sort();
 }
 
-function makeRow(rate, workDetail = "Aクラス メイン") {
-  return { id: uniqueId(), staff: "", dates: [], workDetail, studentCount: "", rate, memo: "" };
+function makeWorkRow(rate, workDetail = "Aクラス メイン") {
+  return {
+    id: uniqueId(),
+    dates: [],
+    workDetail,
+    rate,
+    memo: "",
+  };
+}
+
+function makePerson(rate, name = "") {
+  return {
+    id: uniqueId(),
+    name,
+    works: [makeWorkRow(rate)],
+  };
 }
 
 function makeExpenseRow() {
-  return { id: uniqueId(), item: "", quantity: 1, amount: "", memo: "" };
+  return {
+    id: uniqueId(),
+    applicant: "",
+    item: "",
+    quantity: 1,
+    amount: "",
+    memo: "",
+  };
 }
 
+function personSubtotal(person) {
+  return person.works.reduce((sum, work) => sum + work.dates.length * safeNumber(work.rate), 0);
+}
+
+function personWorkDays(person) {
+  return person.works.reduce((sum, work) => sum + work.dates.length, 0);
+}
+
+
+function runSelfTests() {
+  const tests = [
+    { name: "教室IDから教室を取得できる", actual: getSchoolById("hombu-ronden").name, expected: "本部論田教室" },
+    { name: "存在しない教室IDは先頭教室にフォールバックする", actual: getSchoolById("missing-school").id, expected: schools[0].id },
+    { name: "日付を追加できる", actual: toggleDate([], "2026-05-01").join(","), expected: "2026-05-01" },
+    { name: "日付を再タップすると解除できる", actual: toggleDate(["2026-05-01"], "2026-05-01").length, expected: 0 },
+    { name: "翌月に移動できる", actual: addMonths("2026-05", 1), expected: "2026-06" },
+    { name: "前月に移動できる", actual: addMonths("2026-01", -1), expected: "2025-12" },
+    { name: "人物別小計を計算できる", actual: personSubtotal({ works: [{ dates: ["2026-05-01", "2026-05-08"], rate: 1200 }] }), expected: 2400 },
+    { name: "経費行の初期数量は1", actual: makeExpenseRow().quantity, expected: 1 },
+  ];
+
+  tests.forEach((test) => {
+    if (test.actual !== test.expected) {
+      console.error(`Self test failed: ${test.name}`, test);
+    }
+  });
+}
+
+runSelfTests();
+
 function FieldLabel({ children }) {
-  return <label className="field-label">{children}</label>;
+  return <label className="text-sm font-bold text-slate-700">{children}</label>;
 }
 
 function TextInput(props) {
-  return <input {...props} className={`text-input ${props.className || ""}`} />;
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50 ${props.className || ""}`}
+    />
+  );
 }
 
 function TextAreaInput(props) {
-  return <textarea {...props} className={`text-area-input ${props.className || ""}`} />;
+  return (
+    <textarea
+      {...props}
+      className={`w-full min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50 ${props.className || ""}`}
+    />
+  );
 }
 
 function SelectInput({ value, onChange, children }) {
-  return <select value={value} onChange={(event) => onChange(event.target.value)} className="select-input">{children}</select>;
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+    >
+      {children}
+    </select>
+  );
 }
 
 function Card({ children, className = "" }) {
-  return <div className={`card ${className}`}>{children}</div>;
+  return <div className={`overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
 }
 
 function Button({ children, onClick, variant = "primary", disabled = false, className = "", type = "button" }) {
+  const base = "inline-flex min-h-12 items-center justify-center rounded-2xl px-4 py-3 text-base font-bold transition disabled:cursor-not-allowed disabled:opacity-40";
+  const styles =
+    variant === "outline"
+      ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+      : variant === "ghost"
+        ? "bg-white text-slate-500 hover:bg-red-50 hover:text-red-600"
+        : "bg-blue-600 text-white hover:bg-blue-700";
+
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`button button-${variant} ${className}`}>
+    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles} ${className}`}>
       {children}
     </button>
   );
@@ -264,22 +369,27 @@ function DateCalendar({ displayMonth, selectedDates, onToggle, onPrevMonth, onNe
   const [year, month] = displayMonth.split("-");
 
   return (
-    <div className="calendar">
-      <div className="calendar-header">
-        <button type="button" onClick={onPrevMonth} className="calendar-nav">前月</button>
-        <div className="calendar-title">{year}年{Number(month)}月</div>
-        <button type="button" onClick={onNextMonth} className="calendar-nav">次月</button>
+    <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-2xl bg-blue-50 px-2 py-2 text-base font-bold text-slate-800">
+        <button type="button" onClick={onPrevMonth} className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">前月</button>
+        <div className="text-center">{year}年{Number(month)}月</div>
+        <button type="button" onClick={onNextMonth} className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">次月</button>
       </div>
-      <div className="calendar-weekdays">
+      <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">
         {weekdays.map((weekday) => <div key={weekday}>{weekday}</div>)}
       </div>
-      <div className="calendar-grid">
+      <div className="grid grid-cols-7 gap-1">
         {days.map((date, index) => {
-          if (!date) return <div key={`empty-${index}`} className="calendar-empty" />;
+          if (!date) return <div key={`empty-${index}`} className="h-11" />;
           const day = Number(date.slice(-2));
           const selected = selectedDates.includes(date);
           return (
-            <button key={date} type="button" onClick={() => onToggle(date)} className={`calendar-day ${selected ? "calendar-day-selected" : ""}`}>
+            <button
+              key={date}
+              type="button"
+              onClick={() => onToggle(date)}
+              className={`h-11 rounded-2xl text-base transition ${selected ? "bg-blue-600 font-bold text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-orange-50"}`}
+            >
               {day}
             </button>
           );
@@ -289,191 +399,351 @@ function DateCalendar({ displayMonth, selectedDates, onToggle, onPrevMonth, onNe
   );
 }
 
-function SummaryBox({ totals }) {
-  return (
-    <div className="sticky-summary">
-      <div>
-        <div className="summary-label">ご請求金額</div>
-        <div className="summary-total">{yen(totals.total)}</div>
-      </div>
-      <div className="summary-mini">
-        <span>{totals.totalWorkDays}日</span>
-        <span>{totals.totalStudents}名</span>
-      </div>
-    </div>
-  );
-}
-
-export default function App() {
+export default function InvoiceGeneratorApp() {
   const firstSchool = schools[0];
   const firstClass = firstSchool.classes[0];
 
   const [schoolId, setSchoolId] = useState(firstSchool.id);
   const school = getSchoolById(schoolId);
+  const recipient = "Sowers株式会社";
+
   const [invoiceDate, setInvoiceDate] = useState(todayString());
   const [targetMonth, setTargetMonth] = useState(todayString().slice(0, 7));
-  const recipient = "Sowers株式会社";
   const [issuer, setIssuer] = useState("");
   const [invoiceNo, setInvoiceNo] = useState(`SW-${todayString().split("-").join("")}`);
   const [bankInfo, setBankInfo] = useState("");
   const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState([makeRow(firstSchool.defaultRate, `${firstClass.name}クラス メイン`)]);
-  const [openCalendarRowId, setOpenCalendarRowId] = useState(null);
+  const [people, setPeople] = useState([makePerson(firstSchool.defaultRate, "")]);
+  const [activePersonId, setActivePersonId] = useState(null);
+  const [openCalendarKey, setOpenCalendarKey] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(todayString().slice(0, 7));
   const [expenses, setExpenses] = useState([makeExpenseRow()]);
 
+  const actualActivePersonId = activePersonId || people[0]?.id;
+  const activePerson = people.find((person) => person.id === actualActivePersonId) || people[0];
+
   const totals = useMemo(() => {
-    const totalWorkDays = rows.reduce((sum, row) => sum + row.dates.length, 0);
-    const totalStudents = rows.reduce((sum, row) => sum + safeNumber(row.studentCount), 0);
-    const workTotal = rows.reduce((sum, row) => sum + row.dates.length * safeNumber(row.rate), 0);
+    const workTotal = people.reduce((sum, person) => sum + personSubtotal(person), 0);
+    const totalWorkDays = people.reduce((sum, person) => sum + personWorkDays(person), 0);
     const expenseTotal = expenses.reduce((sum, expense) => sum + safeNumber(expense.quantity) * safeNumber(expense.amount), 0);
-    return { totalWorkDays, totalStudents, workTotal, expenseTotal, total: workTotal + expenseTotal };
-  }, [rows, expenses]);
+    return { workTotal, totalWorkDays, expenseTotal, total: workTotal + expenseTotal };
+  }, [people, expenses]);
 
-  const updateRow = (id, key, value) => setRows((prev) => prev.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
-  const updateExpense = (id, key, value) => setExpenses((prev) => prev.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
-
-  const addRow = () => {
-    const defaultClassName = school.classes[0]?.name || "A";
-    setRows((prev) => [...prev, makeRow(school.defaultRate, `${defaultClassName}クラス メイン`)]);
+  const updatePerson = (personId, key, value) => {
+    setPeople((prev) => prev.map((person) => (person.id === personId ? { ...person, [key]: value } : person)));
   };
-  const removeRow = (id) => setRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
+
+  const updateWork = (personId, workId, key, value) => {
+    setPeople((prev) =>
+      prev.map((person) =>
+        person.id === personId
+          ? {
+              ...person,
+              works: person.works.map((work) => (work.id === workId ? { ...work, [key]: value } : work)),
+            }
+          : person
+      )
+    );
+  };
+
+  const addPerson = () => {
+    const defaultClassName = school.classes[0]?.name || firstClass.name;
+    const nextPerson = makePerson(school.defaultRate, "");
+    nextPerson.works = [makeWorkRow(school.defaultRate, `${defaultClassName}クラス メイン`)];
+    setPeople((prev) => [...prev, nextPerson]);
+    setActivePersonId(nextPerson.id);
+  };
+
+  const removePerson = (personId) => {
+    setPeople((prev) => {
+      if (prev.length === 1) return prev;
+      const next = prev.filter((person) => person.id !== personId);
+      if (actualActivePersonId === personId) setActivePersonId(next[0]?.id || null);
+      return next;
+    });
+  };
+
+  const addWork = (personId) => {
+    const defaultClassName = school.classes[0]?.name || firstClass.name;
+    setPeople((prev) =>
+      prev.map((person) =>
+        person.id === personId
+          ? { ...person, works: [...person.works, makeWorkRow(school.defaultRate, `${defaultClassName}クラス メイン`)] }
+          : person
+      )
+    );
+  };
+
+  const removeWork = (personId, workId) => {
+    setPeople((prev) =>
+      prev.map((person) =>
+        person.id === personId
+          ? { ...person, works: person.works.length === 1 ? person.works : person.works.filter((work) => work.id !== workId) }
+          : person
+      )
+    );
+  };
+
+  const updateExpense = (id, key, value) => {
+    setExpenses((prev) => prev.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
+  };
+
   const addExpense = () => setExpenses((prev) => [...prev, makeExpenseRow()]);
   const removeExpense = (id) => setExpenses((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
 
   const handleSchoolChange = (id) => {
     const nextSchool = getSchoolById(id);
-    const nextClassName = nextSchool.classes[0]?.name || "A";
+    const nextClassName = nextSchool.classes[0]?.name || firstClass.name;
     setSchoolId(nextSchool.id);
-    setRows([makeRow(nextSchool.defaultRate, `${nextClassName}クラス メイン`)]);
-    setOpenCalendarRowId(null);
+    setPeople([makePerson(nextSchool.defaultRate, "")]);
+    setPeople([{ ...makePerson(nextSchool.defaultRate, ""), works: [makeWorkRow(nextSchool.defaultRate, `${nextClassName}クラス メイン`)] }]);
+    setActivePersonId(null);
+    setOpenCalendarKey(null);
   };
 
   const resetForm = () => {
-    const defaultClassName = school.classes[0]?.name || "A";
-    setRows([makeRow(school.defaultRate, `${defaultClassName}クラス メイン`)]);
+    const defaultClassName = school.classes[0]?.name || firstClass.name;
+    setPeople([{ ...makePerson(school.defaultRate, ""), works: [makeWorkRow(school.defaultRate, `${defaultClassName}クラス メイン`)] }]);
     setExpenses([makeExpenseRow()]);
     setIssuer("");
     setBankInfo("");
     setNotes("");
-    setOpenCalendarRowId(null);
+    setActivePersonId(null);
+    setOpenCalendarKey(null);
   };
 
+  const printInvoice = () => window.print();
+
   return (
-    <div className="app">
-      <div className="app-layout">
-        <section className="input-section print-hidden">
-          <div className="header">
-            <div className="badge"><FileText size={14} /> Sowers Invoice Generator</div>
-            <h1>体操教室 請求書作成アプリ</h1>
-            <p>スマホから出勤情報と経費を入力できます。下の請求書プレビューに自動反映されます。</p>
-            <div className="action-grid">
-              <Button variant="outline" onClick={resetForm}>入力リセット</Button>
-              <Button onClick={() => window.print()}><Printer size={18} /> PDF保存・印刷</Button>
+    <div className="min-h-screen bg-slate-50 p-3 text-slate-900 sm:p-4 md:p-8 print:bg-white print:p-0">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_560px] print:block">
+        <section className="space-y-4 print:hidden">
+          <div className="space-y-3">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
+                <FileText className="h-3.5 w-3.5" /> Sowers Franchise System
+              </div>
+              <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 h-2 w-24 rounded-full bg-orange-500" />
+                <p className="text-xs font-bold uppercase tracking-[0.25em] text-blue-600">Invoice Creator</p>
+                <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl md:text-4xl">請求書作成</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-600">人物ごとに出勤情報をまとめ、最後に経費を追加できます。</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button variant="outline" onClick={resetForm} className="w-full">入力リセット</Button>
+              <Button onClick={printInvoice} className="w-full"><Printer className="mr-1 h-4 w-4" />PDF保存・印刷</Button>
             </div>
           </div>
 
-          <SummaryBox totals={totals} />
-
           <Card>
-            <div className="card-inner">
-              <h2>1. 基本情報</h2>
-              <div className="form-grid">
-                <div className="field field-full">
+            <div className="space-y-4 p-4 md:p-5">
+              <div className="h-1.5 w-20 rounded-full bg-blue-600" />
+              <h2 className="text-lg font-black text-slate-900">1. 基本情報</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2 md:col-span-2">
                   <FieldLabel>教室名</FieldLabel>
                   <SelectInput value={schoolId} onChange={handleSchoolChange}>
-                    {schools.map((item) => <option key={item.id} value={item.id}>{item.area}｜{item.name}</option>)}
+                    {schools.map((item) => (
+                      <option key={item.id} value={item.id}>{item.area}｜{item.name}</option>
+                    ))}
                   </SelectInput>
                 </div>
-                <div className="field"><FieldLabel>対象月</FieldLabel><TextInput type="month" value={targetMonth} onChange={(e) => setTargetMonth(e.target.value)} /></div>
-                <div className="field"><FieldLabel>請求日</FieldLabel><TextInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /></div>
-                <div className="field"><FieldLabel>請求書番号</FieldLabel><TextInput value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} /></div>
-                <div className="field"><FieldLabel>宛名</FieldLabel><TextInput value={recipient} readOnly className="readonly" /></div>
-                <div className="field field-full"><FieldLabel>請求者名</FieldLabel><TextInput value={issuer} onChange={(e) => setIssuer(e.target.value)} placeholder="例：〇〇体操教室　代表 〇〇〇〇" /></div>
-                <div className="field field-full"><FieldLabel>振込先</FieldLabel><TextAreaInput value={bankInfo} onChange={(e) => setBankInfo(e.target.value)} placeholder="例：〇〇銀行 〇〇支店 普通 1234567 〇〇〇〇" /></div>
+                <div className="space-y-2">
+                  <FieldLabel>対象月</FieldLabel>
+                  <TextInput type="month" value={targetMonth} onChange={(event) => setTargetMonth(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel>請求日</FieldLabel>
+                  <TextInput type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel>請求書番号</FieldLabel>
+                  <TextInput value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel>宛名</FieldLabel>
+                  <TextInput value={recipient} readOnly className="bg-slate-100" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <FieldLabel>請求者名</FieldLabel>
+                  <TextInput value={issuer} onChange={(event) => setIssuer(event.target.value)} placeholder="例：〇〇体操教室　代表 〇〇〇〇" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <FieldLabel>振込先</FieldLabel>
+                  <TextAreaInput value={bankInfo} onChange={(event) => setBankInfo(event.target.value)} placeholder="例：〇〇銀行 〇〇支店 普通 1234567 〇〇〇〇" />
+                </div>
               </div>
             </div>
           </Card>
 
           <Card>
-            <div className="card-inner">
-              <div className="section-title-row">
-                <h2>2. 出勤情報</h2>
-                <Button onClick={addRow}><Plus size={18} /> 行を追加</Button>
+            <div className="space-y-4 p-4 md:p-5">
+              <div className="grid grid-cols-1 gap-3 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <div className="h-1.5 w-20 rounded-full bg-orange-500" />
+                  <h2 className="text-lg font-black text-slate-900">2. 人物ごとの出勤情報</h2>
+                  <p className="mt-1 text-xs text-slate-500">名前を選んで、その人が担当したクラス・業務を追加してください。</p>
+                </div>
+                <Button onClick={addPerson} className="w-full sm:w-auto"><UserPlus className="mr-1 h-4 w-4" />人物を追加</Button>
               </div>
 
-              <div className="stack">
-                {rows.map((row, index) => {
-                  const workDays = row.dates.length;
-                  const amount = workDays * safeNumber(row.rate);
-                  const isCalendarOpen = openCalendarRowId === row.id;
-
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {people.map((person, index) => {
+                  const isActive = person.id === actualActivePersonId;
                   return (
-                    <div key={row.id} className="entry-card">
-                      <div className="entry-head">
-                        <strong>出勤情報 {index + 1}</strong>
-                        <Button variant="ghost" onClick={() => removeRow(row.id)} disabled={rows.length === 1}><Trash2 size={16} /> 削除</Button>
-                      </div>
-                      <div className="form-grid">
-                        <div className="field"><FieldLabel>氏名（フルネーム）</FieldLabel><TextInput value={row.staff} onChange={(e) => updateRow(row.id, "staff", e.target.value)} placeholder="例：沢野 太郎" /></div>
-                        <div className="field"><FieldLabel>各クラス・業務</FieldLabel><TextInput value={row.workDetail} onChange={(e) => updateRow(row.id, "workDetail", e.target.value)} placeholder="例：Aクラス メイン" /></div>
-                        <div className="field field-full">
-                          <FieldLabel>出勤日</FieldLabel>
-                          <button type="button" onClick={() => setOpenCalendarRowId(isCalendarOpen ? null : row.id)} className="date-button">
-                            <span className={row.dates.length ? "" : "placeholder"}>{row.dates.length ? row.dates.map(formatJapaneseDate).join("、") : "タップして日付を選択"}</span>
-                            <CalendarDays size={20} />
-                          </button>
-                        </div>
-                        {isCalendarOpen && (
-                          <div className="field-full">
-                            <DateCalendar
-                              displayMonth={calendarMonth}
-                              selectedDates={row.dates}
-                              onToggle={(date) => updateRow(row.id, "dates", toggleDate(row.dates, date))}
-                              onPrevMonth={() => setCalendarMonth((current) => addMonths(current, -1))}
-                              onNextMonth={() => setCalendarMonth((current) => addMonths(current, 1))}
-                            />
-                          </div>
-                        )}
-                        <div className="field"><FieldLabel>1日単価</FieldLabel><TextInput type="number" value={row.rate} onChange={(e) => updateRow(row.id, "rate", e.target.value)} /></div>
-                        <div className="field"><FieldLabel>生徒数</FieldLabel><TextInput type="number" value={row.studentCount} onChange={(e) => updateRow(row.id, "studentCount", e.target.value)} placeholder="例：12" /></div>
-                        <div className="field field-full"><FieldLabel>備考</FieldLabel><TextInput value={row.memo} onChange={(e) => updateRow(row.id, "memo", e.target.value)} placeholder="任意" /></div>
-                      </div>
-                      <div className="mini-total">
-                        <span>出勤日数：<b>{workDays}日</b></span>
-                        <span>生徒数：<b>{row.studentCount || "未入力"}</b></span>
-                        <span>小計：<b>{yen(amount)}</b></span>
-                      </div>
-                    </div>
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() => setActivePersonId(person.id)}
+                      className={`shrink-0 rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${isActive ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"}`}
+                    >
+                      {person.name || `人物${index + 1}`}
+                    </button>
                   );
                 })}
               </div>
+
+              {activePerson && (
+                <div className="space-y-4 rounded-3xl border border-orange-200 bg-white p-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <div className="space-y-1">
+                      <FieldLabel>氏名（フルネーム）</FieldLabel>
+                      <TextInput value={activePerson.name} onChange={(event) => updatePerson(activePerson.id, "name", event.target.value)} placeholder="例：沢野 太郎" />
+                    </div>
+                    <Button variant="ghost" onClick={() => removePerson(activePerson.id)} disabled={people.length === 1} className="w-full sm:w-auto">
+                      <Trash2 className="mr-1 h-4 w-4" />この人物を削除
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {activePerson.works.map((work, workIndex) => {
+                      const calendarKey = `${activePerson.id}-${work.id}`;
+                      const isCalendarOpen = openCalendarKey === calendarKey;
+                      const workDays = work.dates.length;
+                      const amount = workDays * safeNumber(work.rate);
+
+                      return (
+                        <div key={work.id} className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold">担当業務 {workIndex + 1}</p>
+                            <Button variant="ghost" onClick={() => removeWork(activePerson.id, work.id)} disabled={activePerson.works.length === 1} className="min-h-10 px-3 py-2 text-sm">
+                              <Trash2 className="mr-1 h-4 w-4" />削除
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                            <div className="space-y-1 md:col-span-2">
+                              <FieldLabel>担当したクラス・業務名</FieldLabel>
+                              <TextInput value={work.workDetail} onChange={(event) => updateWork(activePerson.id, work.id, "workDetail", event.target.value)} placeholder="例：Aクラス メイン" />
+                            </div>
+
+                            <div className="space-y-1 md:col-span-2">
+                              <FieldLabel>出勤日</FieldLabel>
+                              <button
+                                type="button"
+                                onClick={() => setOpenCalendarKey(isCalendarOpen ? null : calendarKey)}
+                                className="flex min-h-14 w-full items-center justify-between gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-left text-base outline-none hover:bg-slate-50"
+                              >
+                                <span className={work.dates.length ? "text-slate-900" : "text-slate-400"}>
+                                  {work.dates.length ? work.dates.map(formatJapaneseDate).join("、") : "タップして日付を選択"}
+                                </span>
+                                <CalendarDays className="h-5 w-5 shrink-0 text-slate-500" />
+                              </button>
+                            </div>
+
+                            <div className="space-y-1">
+                              <FieldLabel>1日単価</FieldLabel>
+                              <TextInput type="number" value={work.rate} onChange={(event) => updateWork(activePerson.id, work.id, "rate", event.target.value)} />
+                            </div>
+
+
+                            {isCalendarOpen && (
+                              <div className="md:col-span-6">
+                                <DateCalendar
+                                  displayMonth={calendarMonth}
+                                  selectedDates={work.dates}
+                                  onToggle={(date) => updateWork(activePerson.id, work.id, "dates", toggleDate(work.dates, date))}
+                                  onPrevMonth={() => setCalendarMonth((current) => addMonths(current, -1))}
+                                  onNextMonth={() => setCalendarMonth((current) => addMonths(current, 1))}
+                                />
+                              </div>
+                            )}
+
+                            <div className="space-y-1 md:col-span-6">
+                              <FieldLabel>備考</FieldLabel>
+                              <TextInput value={work.memo} onChange={(event) => updateWork(activePerson.id, work.id, "memo", event.target.value)} placeholder="任意" />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2 rounded-2xl bg-white px-4 py-3 text-sm sm:grid-cols-2">
+                            <span>出勤日数：<b>{workDays}日</b></span>
+                            <span>小計：<b>{yen(amount)}</b></span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <Button onClick={() => addWork(activePerson.id)} variant="outline" className="w-full">
+                    <Plus className="mr-1 h-4 w-4" />この人物に担当業務を追加
+                  </Button>
+
+                  <div className="rounded-3xl bg-blue-600 p-4 text-white">
+                    <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                      <span>人物別出勤日数：<b>{personWorkDays(activePerson)}日</b></span>
+                      <span>人物別合計：<b>{yen(personSubtotal(activePerson))}</b></span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
           <Card>
-            <div className="card-inner">
-              <div className="section-title-row">
-                <h2>3. 経費</h2>
-                <Button onClick={addExpense}><Plus size={18} /> 経費を追加</Button>
+            <div className="space-y-4 p-4 md:p-5">
+              <div className="grid grid-cols-1 gap-3 sm:flex sm:items-center sm:justify-between">
+                <div className="h-1.5 w-20 rounded-full bg-emerald-500" />
+                <h2 className="text-lg font-black text-slate-900">3. 経費</h2>
+                <Button onClick={addExpense} className="w-full sm:w-auto"><Plus className="mr-1 h-4 w-4" />経費を追加</Button>
               </div>
 
-              <div className="stack">
+              <div className="space-y-3">
                 {expenses.map((expense, index) => {
                   const expenseSubtotal = safeNumber(expense.quantity) * safeNumber(expense.amount);
                   return (
-                    <div key={expense.id} className="entry-card">
-                      <div className="entry-head">
-                        <strong>経費 {index + 1}</strong>
-                        <Button variant="ghost" onClick={() => removeExpense(expense.id)} disabled={expenses.length === 1}><Trash2 size={16} /> 削除</Button>
+                    <div key={expense.id} className="space-y-3 rounded-3xl border border-emerald-200 bg-white p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold">経費 {index + 1}</p>
+                        <Button variant="ghost" onClick={() => removeExpense(expense.id)} disabled={expenses.length === 1} className="min-h-10 px-3 py-2 text-sm">
+                          <Trash2 className="mr-1 h-4 w-4" />削除
+                        </Button>
                       </div>
-                      <div className="form-grid">
-                        <div className="field field-full"><FieldLabel>経費の項目</FieldLabel><TextInput value={expense.item} onChange={(e) => updateExpense(expense.id, "item", e.target.value)} placeholder="例：○○体育館（11:00-14:00）" /></div>
-                        <div className="field"><FieldLabel>数量</FieldLabel><TextInput type="number" value={expense.quantity} onChange={(e) => updateExpense(expense.id, "quantity", e.target.value)} /></div>
-                        <div className="field"><FieldLabel>金額</FieldLabel><TextInput type="number" value={expense.amount} onChange={(e) => updateExpense(expense.id, "amount", e.target.value)} placeholder="例：1000" /></div>
-                        <div className="field field-full"><FieldLabel>備考</FieldLabel><TextInput value={expense.memo} onChange={(e) => updateExpense(expense.id, "memo", e.target.value)} placeholder="任意" /></div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                        <div className="space-y-1 md:col-span-2">
+                          <FieldLabel>申請者</FieldLabel>
+                          <TextInput value={expense.applicant} onChange={(event) => updateExpense(expense.id, "applicant", event.target.value)} placeholder="例：沢野 太郎" />
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <FieldLabel>経費の項目</FieldLabel>
+                          <TextInput value={expense.item} onChange={(event) => updateExpense(expense.id, "item", event.target.value)} placeholder="例：○○体育館（11:00-14:00）" />
+                        </div>
+                        <div className="space-y-1">
+                          <FieldLabel>数量</FieldLabel>
+                          <TextInput type="number" value={expense.quantity} onChange={(event) => updateExpense(expense.id, "quantity", event.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <FieldLabel>金額</FieldLabel>
+                          <TextInput type="number" step="10" value={expense.amount} onChange={(event) => updateExpense(expense.id, "amount", event.target.value)} placeholder="例：1000" />
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <FieldLabel>備考</FieldLabel>
+                          <TextInput value={expense.memo} onChange={(event) => updateExpense(expense.id, "memo", event.target.value)} placeholder="任意" />
+                        </div>
                       </div>
-                      <div className="expense-total">小計：<b>{yen(expenseSubtotal)}</b></div>
+
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right text-sm">小計：<b>{yen(expenseSubtotal)}</b></div>
                     </div>
                   );
                 })}
@@ -482,86 +752,101 @@ export default function App() {
           </Card>
 
           <Card>
-            <div className="card-inner">
-              <h2>4. 備考</h2>
-              <TextAreaInput value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="必要な場合のみ入力" />
+            <div className="space-y-3 p-4 md:p-5">
+              <div className="h-1.5 w-20 rounded-full bg-slate-400" />
+              <h2 className="text-lg font-black text-slate-900">4. 備考</h2>
+              <TextAreaInput value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="必要な場合のみ入力" />
             </div>
           </Card>
         </section>
 
-        <section className="preview-section">
-          <Card className="invoice-card">
-            <div className="invoice">
-              <div className="invoice-title">請求書</div>
+        <section className="space-y-4 print:space-y-0">
+          <Card className="print:rounded-none print:shadow-none">
+            <div className="p-4 md:p-8 print:p-0">
+              <div className="mb-6 border-b-2 border-blue-600 pb-4">
+                <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-blue-600">Sowers Franchise System</p>
+                <h2 className="mt-1 text-center text-2xl font-black tracking-[0.25em] text-slate-900 md:text-3xl">請求書</h2>
+              </div>
 
-              <div className="invoice-top">
-                <div>
-                  <p className="recipient">{recipient}</p>
-                  <p>下記の通りご請求申し上げます。</p>
-                  <div className="claim-box">
-                    <span>ご請求金額</span>
-                    <strong>{yen(totals.total)}</strong>
+              <div className="mb-6 grid grid-cols-1 gap-5 text-sm md:grid-cols-2">
+                <div className="space-y-3">
+                  <div>
+                    <p className="inline-block border-b border-slate-400 pb-1 pr-8 text-lg font-bold">{recipient}</p>
+                    <p className="mt-3">下記の通りご請求申し上げます。</p>
+                  </div>
+                  <div className="rounded-3xl border border-blue-100 bg-blue-50 p-5 print:border print:bg-white print:text-slate-900">
+                    <p className="text-xs font-bold text-blue-600 print:text-slate-600">ご請求金額</p>
+                    <p className="text-4xl font-black text-slate-900">{yen(totals.total)}</p>
                   </div>
                 </div>
-                <div className="invoice-meta">
+                <div className="space-y-1 text-left md:text-right">
                   <p>請求書番号：{invoiceNo}</p>
                   <p>請求日：{invoiceDate}</p>
                   <p>対象月：{targetMonth}</p>
-                  <p className="issuer">{issuer || "請求者名未入力"}</p>
+                  <div className="pt-3"><p className="whitespace-pre-wrap font-bold">{issuer || "請求者名未入力"}</p></div>
                 </div>
               </div>
 
-              <div className="info-grid">
-                <p><span>教室名：</span>{school.name}</p>
-                <p><span>エリア：</span>{school.area}</p>
-                <p><span>曜日：</span>{school.day}</p>
-                <p><span>会場：</span>{school.venue}</p>
+              <div className="mb-5 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+                <p><span className="text-slate-500">教室名：</span>{school.name}</p>
+                <p><span className="text-slate-500">エリア：</span>{school.area}</p>
+                <p><span className="text-slate-500">曜日：</span>{school.day}</p>
+                <p><span className="text-slate-500">会場：</span>{school.venue}</p>
               </div>
 
-              <h3>出勤情報</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>日付</th>
-                      <th>氏名</th>
-                      <th>各クラス・業務</th>
-                      <th>日数</th>
-                      <th>生徒数</th>
-                      <th>単価</th>
-                      <th>金額</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => {
-                      const workDays = row.dates.length;
-                      const amount = workDays * safeNumber(row.rate);
-                      return (
-                        <tr key={row.id}>
-                          <td className="date-cell">{row.dates.length ? row.dates.join("\n") : "未選択"}</td>
-                          <td>{row.staff || "未入力"}</td>
-                          <td>{row.workDetail}</td>
-                          <td className="center">{workDays}日</td>
-                          <td className="center">{row.studentCount || "-"}</td>
-                          <td className="right">{yen(row.rate)}</td>
-                          <td className="right">{yen(amount)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <p className="mb-2 text-sm font-bold">人物別出勤情報</p>
+              <div className="space-y-5">
+                {people.map((person, personIndex) => (
+                  <div key={person.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-bold">{person.name || `人物${personIndex + 1}`}</p>
+                      <p className="text-sm font-bold">人物別合計：{yen(personSubtotal(person))}</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 print:bg-white">
+                            <th className="border border-slate-400 p-2 text-left">日付</th>
+                            <th className="border border-slate-400 p-2 text-left">クラス・業務</th>
+                            <th className="border border-slate-400 p-2 text-center">日数</th>
+                            <th className="border border-slate-400 p-2 text-right">単価</th>
+                            <th className="border border-slate-400 p-2 text-left">備考</th>
+                            <th className="border border-slate-400 p-2 text-right">金額</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {person.works.map((work) => {
+                            const workDays = work.dates.length;
+                            const amount = workDays * safeNumber(work.rate);
+                            return (
+                              <tr key={work.id}>
+                                <td className="whitespace-pre-wrap border border-slate-300 p-2">{work.dates.length ? work.dates.join("\n") : "未選択"}</td>
+                                <td className="border border-slate-300 p-2">{work.workDetail}</td>
+                                <td className="border border-slate-300 p-2 text-center">{workDays}日</td>
+                                <td className="border border-slate-300 p-2 text-right">{yen(work.rate)}</td>
+                                <td className="border border-slate-300 p-2">{work.memo || "-"}</td>
+                                <td className="border border-slate-300 p-2 text-right">{yen(amount)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <h3>経費</h3>
-              <div className="table-wrap">
-                <table>
+              <p className="mb-2 mt-5 text-sm font-bold">経費</p>
+              <div className="overflow-x-auto">
+                <table className="mb-5 w-full min-w-[620px] border-collapse text-xs">
                   <thead>
-                    <tr>
-                      <th>経費の項目</th>
-                      <th>数量</th>
-                      <th>金額</th>
-                      <th>備考</th>
-                      <th>小計</th>
+                    <tr className="bg-slate-50 print:bg-white">
+                      <th className="border border-slate-400 p-2 text-left">申請者</th>
+                      <th className="border border-slate-400 p-2 text-left">経費の項目</th>
+                      <th className="border border-slate-400 p-2 text-center">数量</th>
+                      <th className="border border-slate-400 p-2 text-right">金額</th>
+                      <th className="border border-slate-400 p-2 text-left">備考</th>
+                      <th className="border border-slate-400 p-2 text-right">小計</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -569,11 +854,12 @@ export default function App() {
                       const expenseSubtotal = safeNumber(expense.quantity) * safeNumber(expense.amount);
                       return (
                         <tr key={expense.id}>
-                          <td>{expense.item || "未入力"}</td>
-                          <td className="center">{expense.quantity || 0}</td>
-                          <td className="right">{yen(expense.amount)}</td>
-                          <td>{expense.memo || "-"}</td>
-                          <td className="right">{yen(expenseSubtotal)}</td>
+                          <td className="border border-slate-300 p-2">{expense.applicant || "未入力"}</td>
+                          <td className="border border-slate-300 p-2">{expense.item || "未入力"}</td>
+                          <td className="border border-slate-300 p-2 text-center">{expense.quantity || 0}</td>
+                          <td className="border border-slate-300 p-2 text-right">{yen(expense.amount)}</td>
+                          <td className="border border-slate-300 p-2">{expense.memo || "-"}</td>
+                          <td className="border border-slate-300 p-2 text-right">{yen(expenseSubtotal)}</td>
                         </tr>
                       );
                     })}
@@ -581,27 +867,20 @@ export default function App() {
                 </table>
               </div>
 
-              <div className="totals-table-wrap">
-                <table className="totals-table">
+              <div className="mb-6 flex justify-end">
+                <table className="w-full max-w-sm border-collapse text-sm">
                   <tbody>
-                    <tr><td>合計出勤日数</td><td className="right">{totals.totalWorkDays}日</td></tr>
-                    <tr><td>生徒数合計</td><td className="right">{totals.totalStudents}名</td></tr>
-                    <tr><td>出勤小計</td><td className="right">{yen(totals.workTotal)}</td></tr>
-                    <tr><td>経費小計</td><td className="right">{yen(totals.expenseTotal)}</td></tr>
-                    <tr><td><b>合計金額</b></td><td className="right"><b>{yen(totals.total)}</b></td></tr>
+                    <tr><td className="border border-slate-400 p-2">合計出勤日数</td><td className="border border-slate-400 p-2 text-right">{totals.totalWorkDays}日</td></tr>
+                    <tr><td className="border border-slate-400 p-2">出勤小計</td><td className="border border-slate-400 p-2 text-right">{yen(totals.workTotal)}</td></tr>
+                    <tr><td className="border border-slate-400 p-2">経費小計</td><td className="border border-slate-400 p-2 text-right">{yen(totals.expenseTotal)}</td></tr>
+                    <tr><td className="border border-slate-400 p-2 font-bold">合計金額</td><td className="border border-slate-400 p-2 text-right font-bold">{yen(totals.total)}</td></tr>
                   </tbody>
                 </table>
               </div>
 
-              <div className="note-grid">
-                <div>
-                  <h3>振込先</h3>
-                  <div className="note-box">{bankInfo || "未入力"}</div>
-                </div>
-                <div>
-                  <h3>備考</h3>
-                  <div className="note-box">{notes || "-"}</div>
-                </div>
+              <div className="grid grid-cols-1 gap-4 text-sm">
+                <div><p className="mb-1 font-bold">振込先</p><div className="min-h-16 whitespace-pre-wrap rounded-lg border p-3">{bankInfo || "未入力"}</div></div>
+                <div><p className="mb-1 font-bold">備考</p><div className="min-h-12 whitespace-pre-wrap rounded-lg border p-3">{notes || "-"}</div></div>
               </div>
             </div>
           </Card>
